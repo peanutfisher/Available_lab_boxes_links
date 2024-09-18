@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+  <title>Available Links of Simplified Symmwin and RemoteAnywhere</title>
+  <style>
+    th, td {
+      text-align: center;
+      vertical-align: middle;
+    }
+
+  </style>
+</head>
+<body bgcolor="Silver">  
+    <table border="1" cellspacing="0">
+      <thead>
+        <tr>
+          <th width="12%">Array Model</th>
+          <th width="12%">SimplifiedSymmwin</th>
+          <th width="12%">RemoteAnywhere</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in url_list %}
+        <tr bgcolor="lime">
+          <td width="12%">
+            <a>{{ item.TYPE }}</a>
+          </td>
+          <td width="12%">
+            <a href= '{{ item.LINK_SS }}' target='_blank'>{{ item.SN_SS }}</a>
+          </td>
+          <td width="12%">
+            <a href= '{{ item.LINK_RA }}' target='_blank'>{{ item.SN_RA }}</a>
+          </td>
+        </tr>
+        {% endfor %}  
+
+
+      </tbody>
+    </table>  
+</body>
+</html>
