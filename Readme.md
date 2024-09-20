@@ -1,3 +1,11 @@
+<!--
+ * @Author: peanutfisher meifajia@outlook.com
+ * @Date: 2024-09-20 16:30:07
+ * @LastEditors: peanutfisher meifajia@outlook.com
+ * @LastEditTime: 2024-09-20 16:36:02
+ * @FilePath: \AvailableLabBox\Readme.md
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+-->
 # ALB(Available Lab Boxes)
 ## This is a tool to check following links to find available Symmetrix Array Lab boxes links
 links:
