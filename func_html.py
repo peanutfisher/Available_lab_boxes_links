@@ -2,7 +2,7 @@
 Author: peanutfisher meifajia@outlook.com
 Date: 2024-09-12 16:06:16
 LastEditors: peanutfisher meifajia@outlook.com
-LastEditTime: 2024-09-18 12:38:37
+LastEditTime: 2024-09-20 13:12:56
 FilePath: \AvailableLabBox\func_test.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -10,10 +10,9 @@ Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查�
 from jinja2 import Environment, FileSystemLoader
 import re
 import os.path
+import time
+import logging
 
-# example list
-SS_list = ['http://197900830M1.storage.lab.emc.com:8888/toolbox/#/app?userName=AwBOE0G1iO04&password=1nternal', 'http://196800748M1.storage.lab.emc.com:8888/toolbox/#/app?userName=AwBOE0G1iO04&password=1nternal', 'http://120200705M1.storage.lab.emc.com:8888/toolbox/#/app?userName=AwBOE0G1iO04&password=1nternal']
-RA_list = ['https://120200705M1.storage.lab.emc.com:9519/login:AwBOE0G1iO04:1nternal:SLC/remctrl_menu.html','https://120200830M1.storage.lab.emc.com:9519/login:AwBOE0G1iO04:1nternal:SLC/remctrl_menu.html', 'https://297700494M1.storage.lab.emc.com:9519/login:AwBOE0G1iO04:1nternal:SLC/remctrl_menu.html']
 
 # defining the TYPE based on SN key num
 SN_dict = {'202':'PMAX8500', '200':'PMAX2500', '976':'PMAX8000','979':'PMAX2000', '978':'VMAX250F', '977':'VMAX950F','975':'VMAX850F', '970':'VMAX450F', '972':'VMAX400K','967':'VMAX200K', '968':'VMAX100K'}
@@ -34,7 +33,7 @@ def url_to_dict(list1, list2=None):
         # get each SN pattern from list and do RE search
         for sn in SN_dict.keys():
             p = re.compile('\d'+ sn + '\d+M\d')
-            #print(p)
+            logging.debug(f'Matching patter: {p}')
             result = p.search(url)
             # if result found then create the dict and stop this tier for loop
             if result:
@@ -51,7 +50,7 @@ def url_to_dict(list1, list2=None):
                     for link in list2:
                         # If found the same SN in the other list
                         if SN_name in link:
-                            #print(link)
+                            logging.debug(f'Same SN in both SS and RA link: {link}')
                             # check which type of the link is
                             if SS_patern in url:
                                 
@@ -88,31 +87,50 @@ def url_to_dict(list1, list2=None):
                 # no need to do next SN check as already found one
                 break
         # appending each result(if not null) to the new url list
-        if not url_dict:
+        if url_dict:
             url_list.append(url_dict) 
-     
+    
+    logging.info(f'The url list is created') 
+    logging.debug(f'The content of url list is {url_list}')
+    
     return url_list      
 
 
 
 
 def html_table(data):
-    # The template location
-    file_loader = FileSystemLoader(os.path.join(os.path.dirname(__file__), 'templates'))
+    if data:
+        # The template location
+        file_loader = FileSystemLoader(os.path.join(os.path.dirname(__file__), 'templates'))
 
-    # create env
-    env = Environment(loader = file_loader)
+        # create env
+        env = Environment(loader = file_loader)
 
-    # loading template
-    template = env.get_template('template.html')
+        # loading template
+        template = env.get_template('template.html')
 
-    # render the template
-    output = template.render(url_list=data)
+        # render the template
+        output = template.render(url_list=data)
 
-    # Write html file
-    with open('Available_Lab_boxes.html', 'w') as f:
-        f.write(output)
+        # Get current time as part of filename
+        ctime = time.localtime()
+        ftime = time.strftime("%Y%m%d_%H%M%S", ctime)
+        
+        filename = 'Available_Lab_boxes' + ftime + '.html'
+        
+        # Write html file
+        with open(filename, 'w') as f:
+            f.write(output)
+        
+        logging.info(f'{filename} is created under current directory, please check')
+    
+    else:
+        logging.warning(f'URL LINK list {data} not available...check your code please')
 
-if __name__ == '__main__':
-    url_list = url_to_dict(SS_list, RA_list) + url_to_dict(RA_list)
-    html_table(url_list)
+# if __name__ == '__main__':
+#     # example list
+#     SS_list = ['http://197900830M1.storage.lab.emc.com:8888/toolbox/#/app?userName=AwBOE0G1iO04&password=1nternal', 'http://196800748M1.storage.lab.emc.com:8888/toolbox/#/app?userName=AwBOE0G1iO04&password=1nternal', 'http://120200705M1.storage.lab.emc.com:8888/toolbox/#/app?userName=AwBOE0G1iO04&password=1nternal']
+#     RA_list = ['https://120200705M1.storage.lab.emc.com:9519/login:AwBOE0G1iO04:1nternal:SLC/remctrl_menu.html','https://120200830M1.storage.lab.emc.com:9519/login:AwBOE0G1iO04:1nternal:SLC/remctrl_menu.html', 'https://297700494M1.storage.lab.emc.com:9519/login:AwBOE0G1iO04:1nternal:SLC/remctrl_menu.html']
+
+#     url_list = url_to_dict(SS_list, RA_list) + url_to_dict(RA_list)
+#     html_table(url_list)
