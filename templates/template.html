@@ -1,41 +1,79 @@
 <!DOCTYPE html>
 <html>
-<head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
-  <title>Available Links of Simplified Symmwin and RemoteAnywhere</title>
+
+<head>
+  <meta charset="UTF-8">
+  <title>Available Lab Box Links for Simplified Symmwin and RemoteAnywhere</title>
   <style>
-    th, td {
-      text-align: center;
-      vertical-align: middle;
+    table,
+    th,
+    td {
+      border: 1px solid black;
     }
 
+    th,
+    td {
+      border: 1px solid black;
+      padding-left: 5px;
+      padding-right: 5px;
+    }
   </style>
 </head>
-<body bgcolor="Silver">  
-    <table border="1" cellspacing="0">
-      <thead>
-        <tr>
-          <th width="12%">Array Model</th>
-          <th width="12%">SimplifiedSymmwin</th>
-          <th width="12%">RemoteAnywhere</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for item in url_list %}
-        <tr bgcolor="lime">
-          <td width="12%">
-            <a>{{ item.TYPE }}</a>
-          </td>
-          <td width="12%">
-            <a href= '{{ item.LINK_SS }}' target='_blank'>{{ item.SN_SS }}</a>
-          </td>
-          <td width="12%">
-            <a href= '{{ item.LINK_RA }}' target='_blank'>{{ item.SN_RA }}</a>
-          </td>
-        </tr>
-        {% endfor %}  
 
+<h1>Welcome to Available Lab Box Links for Simplified Symmwin and RemoteAnywhere</h1>
+<h2>This website was generated at {{ generated_time }}</h2>
+<p>NOTE: If this website is older than a week, you need consider to generate a new one since Weekly Credential changed
+</p>
+<p>The data is coming from following 2 lab boxes links.</p>
+<ul>
+  <li><a href="https://phonebook.nexus.cec.delllabs.net/phonebook">Lab boxes RemoteAnywhere links</a></li>
+  <li><a href="https://phonebook.nexus.cec.delllabs.net/phonebook4">Lab boxes V4 Simplified Symmwin links</a></li>
+</ul>
+<h2>The Credential information as below:</h2>
+<p>NOTE: It is weekly credential which means it will change weekly, remember to regenerate this website if you found
+  credential not valid</p>
+<p>NOTE: The password almost not changed but it might be, check <a href="https://dtslabs.emc.com/">DTSLABS</a> official
+  website if need.</p>
+<ul>
+  <li>The Weekly Credential: '{{ credential }}'</li>
+  <li>The Password: '{{ password }}'</li>
+</ul>
 
-      </tbody>
-    </table>  
+<body bgcolor="Silver">
+  <table border="1" cellspacing="0" width="100%">
+    <thead style="position: sticky; top: 0px; background: white;">
+      <tr>
+        <th>Label</th>
+        <th>Array Model</th>
+        <th>RemoteAnywhere</th>
+        <th>CS1</th>
+        <th>CS2</th>
+        <th style="border-left: 1; border-right: 1">Building</th>
+        <th style="border-left: 0; border-right: 1">Lab</th>
+        <th style="border-left: 0; border-right: 1">Tile</th>
+        <th style="border-left: 0; border-right: 1">Owner</th>
+        <th style="border-left: 0; border-right: 1">Group</th>
+      </tr>
+    </thead>
+    <tbody>
+      
+      {% for item in url_list %}
+      <tr bgcolor= '{{ item.COLOR }}' > 
+        <td style="text-align: left; border-left: 1; border-right: 1">{{ item.LABEL }}</td>
+        <td style="text-align: left; border-left: 1; border-right: 1">{{ item.TYPE }}</td>
+        <td style="text-align: center; border-left: 1; border-right: 1"><a href='{{ item.RA }}' target="_blank" rel="noopener noreferrer">{{ item.SN }}</a></td>
+        <td style="text-align: center; border-left: 1; border-right: 1"><a href='{{ item.CS1 }}' target="_blank" >{{ item.CS1_SN }}</a></td>
+        <td style="text-align: center; border-left: 1; border-right: 1"><a href='{{ item.CS2 }}' target="_blank" >{{ item.CS2_SN }}</a></td>
+        <td style="border-right: 0">{{ item.Building }}</td>
+        <td style="border-left: 0; border-right: 0">{{ item.Lab }}</td>
+        <td style="border-left: 0; border-right: 0">{{ item.Tile }}</td>
+        <td style="border-left: 0; border-right: 0">{{ item.Owner }}</td>
+        <td style="border-left: 0">{{ item.Group }}</td> 
+      </tr>
+      {% endfor %}
+
+    </tbody>
+  </table>
 </body>
+
 </html>
