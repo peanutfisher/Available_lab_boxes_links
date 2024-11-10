@@ -17,11 +17,20 @@
       padding-left: 5px;
       padding-right: 5px;
     }
+    .time-text {
+      color: green;
+    }
+    .credential-text {
+      color: blue;
+    }
+    .password-text {
+      color: red;
+    }
   </style>
 </head>
 
 <h1>Welcome to Available Lab Box Links for Simplified Symmwin and RemoteAnywhere</h1>
-<h2>This website was generated at {{ generated_time }}</h2>
+<h2>This website was generated at <span class="time-text">{{ generated_time }}</span></h2>
 <p>NOTE: If this website is older than a week, you need consider to generate a new one since Weekly Credential changed
 </p>
 <p>The data is coming from following 2 lab boxes links.</p>
@@ -35,8 +44,8 @@
 <p>NOTE: The password almost not changed but it might be, check <a href="https://dtslabs.emc.com/">DTSLABS</a> official
   website if need.</p>
 <ul>
-  <li>The Weekly Credential: '{{ credential }}'</li>
-  <li>The Password: '{{ password }}'</li>
+  <li>The Weekly Credential: <span class="credential-text">'{{ credential }}'</span></li>
+  <li>The Password: <span class="password-text">'{{ password }}'</span></li>
 </ul>
 
 <body bgcolor="Silver">
@@ -61,7 +70,7 @@
       <tr bgcolor= '{{ item.COLOR }}' > 
         <td style="text-align: left; border-left: 1; border-right: 1">{{ item.LABEL }}</td>
         <td style="text-align: left; border-left: 1; border-right: 1">{{ item.TYPE }}</td>
-        <td style="text-align: center; border-left: 1; border-right: 1"><a href='{{ item.RA }}' target="_blank" rel="noopener noreferrer">{{ item.SN }}</a></td>
+        <td style="text-align: center; border-left: 1; border-right: 1"><a href='{{ item.RA }}' target="_blank" >{{ item.RA_SN }}</a></td>
         <td style="text-align: center; border-left: 1; border-right: 1"><a href='{{ item.CS1 }}' target="_blank" >{{ item.CS1_SN }}</a></td>
         <td style="text-align: center; border-left: 1; border-right: 1"><a href='{{ item.CS2 }}' target="_blank" >{{ item.CS2_SN }}</a></td>
         <td style="border-right: 0">{{ item.Building }}</td>
