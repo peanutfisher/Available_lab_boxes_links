@@ -2,7 +2,7 @@
 Author: peanutfisher meifajia@outlook.com
 Date: 2024-05-19 17:29:05
 LastEditors: peanutfisher meifajia@outlook.com
-LastEditTime: 2024-11-10 13:38:59
+LastEditTime: 2024-11-11 14:11:01
 FilePath: \AvailableLabBox\test.py
 '''
 import logging
@@ -19,6 +19,8 @@ from aiohttp import ClientTimeout
 import asyncio
 import PySimpleGUI as sg
 import webbrowser
+import threading
+from queue import Queue
 
 url_RA = 'https://phonebook.nexus.cec.delllabs.net/phonebook'
 
@@ -30,6 +32,12 @@ Cur_Time = ''
 COLOR = ['silver', 'lime']
 raw_file = []
 raw_file_name = 'Raw_Data'
+
+# The global queue is used to get message when we cancel progress bar
+global_queue = Queue()
+
+# cancel flag
+cancelled_flag = False
 
 # defining the TYPE based on SN key num
 SN_dict = {'202':'PMAX8500', '200':'PMAX2500', '976':'PMAX8000','979':'PMAX2000', '978':'VMAX250F', '977':'VMAX950F','975':'VMAX850F', '970':'VMAX450F', '972':'VMAX400K','967':'VMAX200K', '968':'VMAX100K'}
@@ -65,9 +73,34 @@ def read_html(html):
 
 def get_link(url):
     try:
-        html = requests.get(url, verify=False, timeout=5).text
-        #logger.debug(f'html content: {html}')
-        logger.info(f'Connected to {url}')
+        # html = requests.get(url, verify=False, timeout=5).text
+        # #logger.debug(f'html content: {html}')
+        # logger.info(f'Connected to {url}')
+        
+        # for internal testing
+        html = read_html('html_ra_sample.html')
+        
+        # use xpath to get all the table content from the website    
+        links = etree.HTML(html).xpath('//tr')
+        link_list = []
+        for element in links:
+            #logger.debug(element)
+            # get all text from the table entry(each row had 12 entries)
+            text = ["".join(td.itertext()).strip() for td in element.xpath('.//td')]
+            
+            #logger.debug(text)
+            link_list.append(text)
+        
+        # delete empty one
+        link_list = [entry for entry in link_list if entry]   
+        logger.debug(f'link_list: {link_list}')
+        
+        # get current CREDENTIAL
+        cred = link_list[0][2] or link_list[1][2]
+        logger.debug(f'Current CREDENTIAL: {cred}')
+        
+        # return the generated list and credential for next step
+        return (link_list, cred)
         
     
     except Exception as e:
@@ -75,40 +108,19 @@ def get_link(url):
         logger.error('*********************************************************************************************************************')
         logger.error('Please close and retry after you fixed the network.')
         logger.error(str(e))
-        sg.popup_error(f'Can not connect to links: {url}, please check your Network connection and your VPN connection!!', title='ERROR MESSAGE', font=('Arial', 11))
+        sg.popup_error(f'Can not connect to links: {url}, please check your VPN Network connection!!', title='ERROR MESSAGE', font=('Arial', 11))
         return([],'None')
 
-    # # for internal testing
-    # html = read_html('html_ra_sample.html')
     
-    # use xpath to get all the table content from the website    
-    links = etree.HTML(html).xpath('//tr')
-    link_list = []
-    for element in links:
-        #logger.debug(element)
-        # get all text from the table entry(each row had 12 entries)
-        text = ["".join(td.itertext()).strip() for td in element.xpath('.//td')]
-        
-        #logger.debug(text)
-        link_list.append(text)
-    
-    # delete empty one
-    link_list = [entry for entry in link_list if entry]   
-    logger.debug(f'link_list: {link_list}')
-    
-    # get current CREDENTIAL
-    cred = link_list[0][2] or link_list[1][2]
-    logger.debug(f'Current CREDENTIAL: {cred}')
-    
-    # return the generated list and credential for next step
-    return (link_list, cred)
 
    
-async def check_link(link_list, credential):
+async def check_link(link_list, credential, queue):
 
     """Check the item in the list and create a dict item for each SN, finally add them to a list.
     """
-
+    global global_queue
+    global cancelled_flag
+    
     # encode CREDENTIAL for web link(some special mark like +(%2B), /(%2F), etc. need to be encoded)
     web_credential = urllib.parse.quote(credential)
     
@@ -125,17 +137,21 @@ async def check_link(link_list, credential):
     # Record valid links
     valid_count = 0
     
+
     # check each item in link_list
     for item in link_list:
+        # check global queue for pbar cancelling message
+        if not global_queue.empty():
+            m = global_queue.get()
+            logger.debug(f'global queue in check_link: {m}')
+            if m == 'cancelled':
+                cancelled_flag = True
+                break
+        
         count += 1
-                
-        # progress bar
-        pbar = sg.one_line_progress_meter('Checking available links', count, total_count, orientation='h', key='PROGRESSBAR')
-        if not pbar:
-            sg.one_line_progress_meter_cancel('PROGRESSBAR')
-            logger.warning('User cancel the CREATE action, progress bar closed!')
-            sg.popup('CREATE action is cancelled!', title='Warning', font=('Arial', 12))
-            return
+        queue.put(('progress', count, total_count))
+        
+
         
         # store the new dict value
         url_dict = {}
@@ -227,21 +243,28 @@ async def check_link(link_list, credential):
                 url_dict['RA'] = ''
             else:
                 logger.warning(f'No available lab box links found for {SN}!')
-                         
+                        
         
             
         if url_dict:
             html_list.append(url_dict)
             logger.debug(f'url_dict: {url_dict}')
 
-    logger.debug(f'html_list: {html_list}')
-    
-    
-    # Created Raw file for refresh using
-    logger.debug(f'raw_file:{raw_file}')
-    write_file(raw_file)
+    if not cancelled_flag:
+        logger.debug(f'html_list: {html_list}')
+        
+        
+        # Created Raw file for refresh using
+        logger.debug(f'raw_file:{raw_file}')
+        write_file(raw_file)
 
-    return html_list 
+        #return html_list
+        queue.put(('done', html_list))
+        
+    # else:
+    #     html_list = []
+    #     return html_list
+        
 
 def get_model(sn):
     model = ''
@@ -261,23 +284,17 @@ def get_model(sn):
     
 
 async def test_link(link):
-    try:
-        # response = requests.get(link, verify=False, timeout=4)
-        # if response.status_code == 200:
-        #     logger.info(f'reachable url: {link}')
-        
-        # set the connection timeout 10s for each URL detection
+    try:        
+        # set the connection timeout for each URL detection
         timeout = ClientTimeout(total=18)
         
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False), timeout=timeout) as session:
         #async with aiohttp.ClientSession() as session:
             async with session.get(link) as response:
                 status = response.status
-
-                # put available links into corresponding list
                 if status == 200:
                     logging.debug(f'reachable url: {link}')
-        return True
+                    return True
     except:
         logger.warning(f'unreachable url: {link}')
         return False
@@ -324,9 +341,10 @@ def html_table(data, cred):
     
     else:
         logging.warning(f'URL LINK list {data} not available...check check now')
-        sg.popup_error(f'Cannot generate HTML, please check your Network connection and your VPN connection!!', title='ERROR MESSAGE', font=('Arial', 11))
+        sg.popup_error(f'Cannot generate HTML, please check your VPN connection and retry!!', title='ERROR MESSAGE', font=('Arial', 11))
 
 def write_file(listname):
+    
     if listname:
         # dump the list to json file        
         with open('Raw_Data', 'w') as f:
@@ -367,25 +385,29 @@ def get_credential(url, raw_file):
     # return those cred and list for next action
     return (old_cred, old_list, latest_cred, latest_list)
         
-async def generate_html(cred, list_name):
-    """Used to generate a latest Credential from web and generate a new html with latest credential"""
-    start_time = time.time()
+def coroutine_task(cred, list_name, queue):
+    """Used to run coroutine task for check_link function"""
+    asyncio.run(check_link(list_name, cred, queue))
     
-    html_list = await check_link(list_name, cred)
-    html_table(html_list, cred)
+    # start_time = time.time()
     
-    took_time = time() - start_time
-    logger.info(f'It took about {took_time}s to complete the job')
+    # html_list = await check_link(list_name, cred)
+    # html_table(html_list, cred)
+    
+    # took_time = time() - start_time
+    # logger.info(f'It took about {took_time}s to complete the job')
  
          
-async def main():   
+def main():
+    global global_queue
+    global cancelled_flag   
     # Disable the warning for SSL
-    
     requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
     logger.info('Disabling SSL warning message during url requests')
     
     old_cred, old_list, latest_cred, latest_list = get_credential(url_RA, raw_file_name)
     logger.debug(f'old_cred: {old_cred}, old_list: {old_list}, latest_cred: {latest_cred}, latest_list: {latest_list}')
+    
     if old_cred == latest_cred:
         compare_result = 'SAME'
         compare_color = 'yellow'
@@ -423,35 +445,72 @@ async def main():
         
         [sg.Push(), sg.Button('CREATE', font=('Arial', 11), key='-CREATE-'),sg.Push(), sg.Button('REFRESH', font=('Arial', 11), key='-REFRESH-'), sg.Push(), sg.Button('CANCEL', font=('Arial', 11)), sg.Push()]
     ]
+    
     window = sg.Window('ALB - Available Lab Box', layout=layout, element_padding=5, margins=(30, 20))
+    queue = Queue()
+    
     
     while True:
-        event, values = window.read()
+        event, values = window.read(timeout=100)
         if event == sg.WIN_CLOSED or event == 'CANCEL':
             break
         
-        if latest_list:
-            if event == '-CREATE-':
-                await generate_html(latest_cred, latest_list)
+        if not cancelled_flag:
+            if not queue.empty():
+                message = queue.get()
+                logger.debug(f'message: {message}')
+                if message[0] == 'progress':
+                    _, count, total_count = message
+                    pbar = sg.one_line_progress_meter('Checking available links', count, total_count, orientation='h', key='PROGRESSBAR')
+                    # if user cancel the progress bar
+                    if not pbar:
+                        global_queue.put(('cancelled'))
 
-            if event == '-REFRESH-':
+                        sg.one_line_progress_meter_cancel('PROGRESSBAR')
+                        logger.warning('User cancel the CREATE action, progress bar closed!')
+                        sg.popup('CREATE action is cancelled!', title='Warning', font=('Arial', 12))
+                        
+                
+                elif message[0] == 'done':
+                    html_list = message[1]
+                    sg.one_line_progress_meter_cancel('PROGRESSBAR')
+                    html_table(html_list, latest_cred)
+                
+            
+        if event == '-CREATE-':
+            # reset cancel flag to False
+            cancelled_flag = False
+            # empty current queue
+            queue = Queue()
+            # check if we got latest list
+            if not latest_list:
+                old_cred, old_list, latest_cred, latest_list = get_credential(url_RA, raw_file_name)
+            
+            if latest_list:
+                threading.Thread(target=coroutine_task, args=(latest_cred, latest_list, queue), daemon=True).start()
+            
+        if event == '-REFRESH-':
+            cancelled_flag = False
+            # empty current queue
+            queue = Queue()
+            # check if we got latest list and latest credential
+            if not latest_list:
+                old_cred, old_list, latest_cred, latest_list = get_credential(url_RA, raw_file_name)
+            
+            if latest_list:
                 # check if Raw_Data exists
                 if old_list:
                     if compare_result == 'SAME':
                         sg.popup(f"Credential <{latest_cred}> are latest! No need to do REFRESH", title='Warning', font=('Arial', 12))
                     else:
-                        await generate_html(latest_cred, old_list)
+                        threading.Thread(target=coroutine_task, args=(latest_cred, old_list, queue), daemon=True).start()
                 else:
                     sg.popup_error(f"{raw_file_name} NOT found or Corrupted, please use 'CREATE' button to get a new HTML!", title='ERROR MESSAGE', font=('Arial', 11))
-        else:
-            sg.popup_error(f'Cannot connect to links: {url_RA}, please check your Network connection and your VPN connection!!', title='ERROR MESSAGE', font=('Arial', 11))    
-
 
     window.close()
     
     
     
 if __name__ == '__main__':
-
-    asyncio.run(main())
+    main()
 
