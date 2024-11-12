@@ -2,7 +2,7 @@
 Author: peanutfisher meifajia@outlook.com
 Date: 2024-05-19 17:29:05
 LastEditors: peanutfisher meifajia@outlook.com
-LastEditTime: 2024-11-11 16:39:18
+LastEditTime: 2024-11-12 17:37:24
 FilePath: \AvailableLabBox\test.py
 '''
 import logging
@@ -33,7 +33,14 @@ COLOR = ['silver', 'lime']
 raw_file = []
 raw_file_name = 'Raw_Data'
 
+# Special handling for DTS boxes
+dts_1162 = ['296801611M1', '10.60.35.245', 'VMAX100K', 'V3']
+dts_2205 = ['220002205M1', '10.60.8.150', 'PMAX2500', 'V4']
+dts_2206 = ['220002206M1', '10.60.8.156', 'PMAX2500', 'V4']
+dts_0142 = ['220200142M1', '10.60.8.162', 'PMAX8500', 'V4']
 
+
+    
 # cancel flag
 cancelled_flag = False
 
@@ -64,6 +71,42 @@ logger.warning('this is warning information')
 logger.error('this is error information')
 logger.critical('this is critical information')
 
+
+def dts_array_dict(dts_list, credential):
+    dts_dict = {}
+    sn_1 = dts_list[0]
+    sn_2 = dts_list[0][:-1] + '2'
+    ip_1 = dts_list[1]
+    ip_2 = ip_1[:-1] + str(int(ip_1[-1]) + 1)
+    model = dts_list[2]
+    type = dts_list[-1]
+    # encode CREDENTIAL for web link(some special mark like +(%2B), /(%2F), etc. need to be encoded)
+    web_credential = urllib.parse.quote(credential)
+    
+    ra_link = f'http://{ip_1}:9519/login:{web_credential}:{PASSWORD}:SLC/remctrl_menu.html'
+    cs1_ip = f'{ip_1}(CSControl)'
+    cs2_ip = f'{ip_2}(CSControl)'
+
+    if type == 'V4':
+        dts_dict = dict(zip(['TYPE', 'RA_SN', 'RA', 'CS1_SN', 'CS2_SN'], [model, sn_1, ra_link, cs1_ip, cs2_ip]))
+    else:
+        dts_dict = dict(zip(['TYPE', 'RA_SN', 'RA', 'CS1_SN', 'CS2_SN'], [model, sn_1, ra_link, '', '']))
+        
+    
+    if dts_dict:
+        return dts_dict
+
+def dts_array_list(credential):
+    dts = []
+    # create dict for each Sn and added to target list
+    for each in [dts_1162, dts_2205, dts_2206, dts_0142]:
+        result = dts_array_dict(each, credential)
+        logger.debug(f'dts_dict: {result}')
+        dts.append(result)
+    
+    if dts:
+        return dts    
+    
 def read_html(html):
         with open(html, 'r') as f:
             return f.read()
@@ -254,9 +297,6 @@ async def check_link(link_list, credential, queue):
         #return html_list
         queue.put(('done', html_list))
         
-    # else:
-    #     html_list = []
-    #     return html_list
         
 
 def get_model(sn):
@@ -292,7 +332,7 @@ async def test_link(link):
         logger.warning(f'unreachable url: {link}')
         return False
 
-def html_table(data, cred):
+def html_table(data, dts_data, cred):
     global Cur_Time
     global PASSWORD
     
@@ -300,6 +340,7 @@ def html_table(data, cred):
     ctime = time.localtime()
     Cur_Time = time.strftime("%Y%m%d%H%M", ctime)
     web_time = time.strftime("%H:%M:%S %m/%d/%Y", ctime)
+    
         
     if data:
         # The template location
@@ -312,7 +353,7 @@ def html_table(data, cred):
         template = env.get_template('template.html')
 
         # render the template
-        output = template.render(url_list=data, generated_time=web_time, credential=cred, password=PASSWORD)
+        output = template.render(url_list=data, dts_list=dts_data, generated_time=web_time, credential=cred, password=PASSWORD)
         #logger.debug(f'Template output: {output}')
         
         
@@ -407,7 +448,7 @@ def main():
     old_cred, old_list, latest_cred, latest_list, compare_result, compare_color = get_credential(url_RA, raw_file_name)
     logger.debug(f'old_cred: {old_cred}, old_list: {old_list}, latest_cred: {latest_cred}, latest_list: {latest_list}, compare_result: {compare_result}, compare_color: {compare_color}') 
     
-
+    dtslab = dts_array_list(latest_cred)
 
     # GUI part - PySimpleGUI
     layout = [
@@ -468,7 +509,8 @@ def main():
                 elif message[0] == 'done':
                     html_list = message[1]
                     sg.one_line_progress_meter_cancel('PROGRESSBAR')
-                    html_table(html_list, latest_cred)
+                    dts_data = dts_array_list(latest_cred)
+                    html_table(html_list, dts_data, latest_cred)
                 
             
         if event == '-CREATE-':

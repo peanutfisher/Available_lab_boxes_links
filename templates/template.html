@@ -37,6 +37,7 @@
 <ul>
   <li><a href="https://phonebook.nexus.cec.delllabs.net/phonebook">Lab boxes RemoteAnywhere links</a></li>
   <li><a href="https://phonebook.nexus.cec.delllabs.net/phonebook4">Lab boxes V4 Simplified Symmwin links</a></li>
+  <li><a href="https://dtslabs.emc.com/">DTSLABS</a></li>
 </ul>
 <h2>The Credential information as below:</h2>
 <p>NOTE: It is weekly credential which means it will change weekly, remember to regenerate this website if you found
@@ -65,7 +66,21 @@
       </tr>
     </thead>
     <tbody>
-      
+      {% for item in dts_list %}
+      <tr bgcolor= 'orange' > 
+        <td style="text-align: left; border-left: 1; border-right: 1">DTS LAB</td>
+        <td style="text-align: left; border-left: 1; border-right: 1">{{ item.TYPE }}</td>
+        <td style="text-align: center; border-left: 1; border-right: 1"><a href='{{ item.RA }}' target="_blank" >{{ item.RA_SN }}</a></td>
+        <td style="text-align: center; border-left: 1; border-right: 1">{{ item.CS1_SN }}</td>
+        <td style="text-align: center; border-left: 1; border-right: 1">{{ item.CS2_SN }}</td>
+        <td style="border-right: 0"> </td>
+        <td style="border-left: 0; border-right: 0">DTS</td>
+        <td style="border-left: 0; border-right: 0"> </td>
+        <td style="border-left: 0; border-right: 0"> </td>
+        <td style="border-left: 0">DTS LAB</td> 
+      </tr>
+      {% endfor %}
+      <tr></tr>
       {% for item in url_list %}
       <tr bgcolor= '{{ item.COLOR }}' > 
         <td style="text-align: left; border-left: 1; border-right: 1">{{ item.LABEL }}</td>
