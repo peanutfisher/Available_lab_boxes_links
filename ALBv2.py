@@ -2,7 +2,7 @@
 Author: peanutfisher meifajia@outlook.com
 Date: 2024-05-19 17:29:05
 LastEditors: peanutfisher meifajia@outlook.com
-LastEditTime: 2024-11-11 14:11:01
+LastEditTime: 2024-11-11 16:39:18
 FilePath: \AvailableLabBox\test.py
 '''
 import logging
@@ -33,8 +33,6 @@ COLOR = ['silver', 'lime']
 raw_file = []
 raw_file_name = 'Raw_Data'
 
-# The global queue is used to get message when we cancel progress bar
-global_queue = Queue()
 
 # cancel flag
 cancelled_flag = False
@@ -73,12 +71,12 @@ def read_html(html):
 
 def get_link(url):
     try:
-        # html = requests.get(url, verify=False, timeout=5).text
-        # #logger.debug(f'html content: {html}')
-        # logger.info(f'Connected to {url}')
+        html = requests.get(url, verify=False, timeout=5).text
+        #logger.debug(f'html content: {html}')
+        logger.info(f'Connected to {url}')
         
-        # for internal testing
-        html = read_html('html_ra_sample.html')
+        # # for internal testing
+        # html = read_html('html_ra_sample.html')
         
         # use xpath to get all the table content from the website    
         links = etree.HTML(html).xpath('//tr')
@@ -93,7 +91,7 @@ def get_link(url):
         
         # delete empty one
         link_list = [entry for entry in link_list if entry]   
-        logger.debug(f'link_list: {link_list}')
+        #logger.debug(f'link_list: {link_list}')
         
         # get current CREDENTIAL
         cred = link_list[0][2] or link_list[1][2]
@@ -118,7 +116,6 @@ async def check_link(link_list, credential, queue):
 
     """Check the item in the list and create a dict item for each SN, finally add them to a list.
     """
-    global global_queue
     global cancelled_flag
     
     # encode CREDENTIAL for web link(some special mark like +(%2B), /(%2F), etc. need to be encoded)
@@ -140,13 +137,9 @@ async def check_link(link_list, credential, queue):
 
     # check each item in link_list
     for item in link_list:
-        # check global queue for pbar cancelling message
-        if not global_queue.empty():
-            m = global_queue.get()
-            logger.debug(f'global queue in check_link: {m}')
-            if m == 'cancelled':
-                cancelled_flag = True
-                break
+        if cancelled_flag:
+            break
+        
         
         count += 1
         queue.put(('progress', count, total_count))
@@ -248,14 +241,14 @@ async def check_link(link_list, credential, queue):
             
         if url_dict:
             html_list.append(url_dict)
-            logger.debug(f'url_dict: {url_dict}')
+            #logger.debug(f'url_dict: {url_dict}')
 
     if not cancelled_flag:
         logger.debug(f'html_list: {html_list}')
         
         
         # Created Raw file for refresh using
-        logger.debug(f'raw_file:{raw_file}')
+        #logger.debug(f'raw_file:{raw_file}')
         write_file(raw_file)
 
         #return html_list
@@ -270,7 +263,7 @@ def get_model(sn):
     model = ''
     for sn_pattern in SN_dict.keys():
             p = re.compile('\d'+ sn_pattern + '\d+M\d')
-            logging.debug(f'Matching patter: {p}')
+            #logging.debug(f'Matching patter: {p}')
             result = p.search(sn)
             # if result found then create the dict and stop this tier for loop
             if result:
@@ -382,8 +375,15 @@ def get_credential(url, raw_file):
     latest_list, latest_cred = get_link(url)
     logger.debug(f'Latest CREDENTIAL: {latest_cred}')
     
+    if old_cred == latest_cred:
+        compare_result = 'SAME'
+        compare_color = 'yellow'
+    else:
+        compare_result = 'NOT SAME'
+        compare_color = 'red'
+    
     # return those cred and list for next action
-    return (old_cred, old_list, latest_cred, latest_list)
+    return (old_cred, old_list, latest_cred, latest_list, compare_result, compare_color)
         
 def coroutine_task(cred, list_name, queue):
     """Used to run coroutine task for check_link function"""
@@ -399,23 +399,16 @@ def coroutine_task(cred, list_name, queue):
  
          
 def main():
-    global global_queue
     global cancelled_flag   
     # Disable the warning for SSL
     requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
     logger.info('Disabling SSL warning message during url requests')
     
-    old_cred, old_list, latest_cred, latest_list = get_credential(url_RA, raw_file_name)
-    logger.debug(f'old_cred: {old_cred}, old_list: {old_list}, latest_cred: {latest_cred}, latest_list: {latest_list}')
+    old_cred, old_list, latest_cred, latest_list, compare_result, compare_color = get_credential(url_RA, raw_file_name)
+    logger.debug(f'old_cred: {old_cred}, old_list: {old_list}, latest_cred: {latest_cred}, latest_list: {latest_list}, compare_result: {compare_result}, compare_color: {compare_color}') 
     
-    if old_cred == latest_cred:
-        compare_result = 'SAME'
-        compare_color = 'yellow'
-    else:
-        compare_result = 'NOT SAME'
-        compare_color = 'red'
-    
-    
+
+
     # GUI part - PySimpleGUI
     layout = [
         [sg.Text('Welcome to the ALB(Available Lab Box) tool', font=('Arial', 25))],
@@ -426,19 +419,21 @@ def main():
         [sg.Push()],
         [sg.Push()],
         [sg.Push()],
-        [sg.Text('Latest Credential:', font=('Arial', 13)), sg.Text(text=latest_cred, font=('Consolas', 12), text_color='blue'), 
+        
+        [sg.Push(), sg.Text('Latest Credential:', font=('Arial', 13)), sg.Text(text=latest_cred, key='-LATEST-', font=('Consolas', 12), text_color='blue'), 
             sg.VerticalSeparator(),
-            sg.Text(text=compare_result, text_color=compare_color),
+            sg.Text(text=compare_result, key='-COMPARE-', text_color=compare_color),
             sg.VerticalSeparator(),
-            sg.Text('Last Credential:', font=('Arial', 13)), sg.Text(text=old_cred, font=('Consolas', 12), text_color='blue')],
+            sg.Text('Last Credential:', font=('Arial', 13)), sg.Text(text=old_cred, key='-LAST-', font=('Consolas', 12), text_color='blue'),
+            sg.Push()],
         
         [sg.Push()],
         [sg.Push()],
         [sg.Push()],
-        [sg.Frame('Button Function', 
+        [sg.Push(), sg.Frame('Button Function', 
             [[sg.Text('CREATE', font=('Arial', 11)), sg.Text('  - will generate a new HTML from above websites', font=('Arial', 9))],
             [sg.Text('REFRESH', font=('Arial', 11)), sg.Text('- refresh the old HTML with new Credential', font=('Arial', 9))],
-            [sg.Text('CANCEL', font=('Arial', 11)), sg.Text('  - exit the program', font=('Arial', 9))]])],
+            [sg.Text('CANCEL', font=('Arial', 11)), sg.Text('  - exit the program', font=('Arial', 9))]]), sg.Push()],
         
         [sg.Push()],
         [sg.Push()],
@@ -457,15 +452,14 @@ def main():
         
         if not cancelled_flag:
             if not queue.empty():
-                message = queue.get()
+                message = queue.get_nowait()
                 logger.debug(f'message: {message}')
                 if message[0] == 'progress':
                     _, count, total_count = message
                     pbar = sg.one_line_progress_meter('Checking available links', count, total_count, orientation='h', key='PROGRESSBAR')
                     # if user cancel the progress bar
                     if not pbar:
-                        global_queue.put(('cancelled'))
-
+                        cancelled_flag = True
                         sg.one_line_progress_meter_cancel('PROGRESSBAR')
                         logger.warning('User cancel the CREATE action, progress bar closed!')
                         sg.popup('CREATE action is cancelled!', title='Warning', font=('Arial', 12))
@@ -484,10 +478,14 @@ def main():
             queue = Queue()
             # check if we got latest list
             if not latest_list:
-                old_cred, old_list, latest_cred, latest_list = get_credential(url_RA, raw_file_name)
+                old_cred, old_list, latest_cred, latest_list, compare_result, compare_color = get_credential(url_RA, raw_file_name)
             
             if latest_list:
                 threading.Thread(target=coroutine_task, args=(latest_cred, latest_list, queue), daemon=True).start()
+                old_cred, old_list, latest_cred, latest_list, compare_result, compare_color = get_credential(url_RA, raw_file_name)
+                window['-LATEST-'].update(latest_cred)
+                window['-LAST-'].update(old_cred)
+                window['-COMPARE-'].update(value=compare_result, text_color=compare_color)
             
         if event == '-REFRESH-':
             cancelled_flag = False
@@ -495,7 +493,7 @@ def main():
             queue = Queue()
             # check if we got latest list and latest credential
             if not latest_list:
-                old_cred, old_list, latest_cred, latest_list = get_credential(url_RA, raw_file_name)
+                old_cred, old_list, latest_cred, latest_list, compare_result, compare_color = get_credential(url_RA, raw_file_name)
             
             if latest_list:
                 # check if Raw_Data exists
