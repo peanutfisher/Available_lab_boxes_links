@@ -2,7 +2,7 @@
 Author: peanutfisher meifajia@outlook.com
 Date: 2024-05-19 17:29:05
 LastEditors: peanutfisher meifajia@outlook.com
-LastEditTime: 2024-11-12 17:37:24
+LastEditTime: 2024-11-13 17:15:22
 FilePath: \AvailableLabBox\test.py
 '''
 import logging
@@ -30,7 +30,6 @@ url_SS = 'https://phonebook.nexus.cec.delllabs.net/phonebook4'
 PASSWORD = '1nternal'
 Cur_Time = ''
 COLOR = ['silver', 'lime']
-raw_file = []
 raw_file_name = 'Raw_Data'
 
 # Special handling for DTS boxes
@@ -41,8 +40,10 @@ dts_0142 = ['220200142M1', '10.60.8.162', 'PMAX8500', 'V4']
 
 
     
-# cancel flag
+# preset flags
 cancelled_flag = False
+test_flag = False
+#test_flag = True
 
 # defining the TYPE based on SN key num
 SN_dict = {'202':'PMAX8500', '200':'PMAX2500', '976':'PMAX8000','979':'PMAX2000', '978':'VMAX250F', '977':'VMAX950F','975':'VMAX850F', '970':'VMAX450F', '972':'VMAX400K','967':'VMAX200K', '968':'VMAX100K'}
@@ -114,12 +115,13 @@ def read_html(html):
 
 def get_link(url):
     try:
-        html = requests.get(url, verify=False, timeout=5).text
-        #logger.debug(f'html content: {html}')
-        logger.info(f'Connected to {url}')
-        
-        # # for internal testing
-        # html = read_html('html_ra_sample.html')
+        if not test_flag:
+            html = requests.get(url, verify=False, timeout=5).text
+            #logger.debug(f'html content: {html}')
+            logger.info(f'Connected to {url}')
+        else:
+            # for internal testing
+            html = read_html('html_ra_sample.html')
         
         # use xpath to get all the table content from the website    
         links = etree.HTML(html).xpath('//tr')
@@ -155,7 +157,7 @@ def get_link(url):
     
 
    
-async def check_link(link_list, credential, queue):
+async def check_link(link_list, credential, queue, refresh_flag=False):
 
     """Check the item in the list and create a dict item for each SN, finally add them to a list.
     """
@@ -177,18 +179,17 @@ async def check_link(link_list, credential, queue):
     # Record valid links
     valid_count = 0
     
+    # file to store raw item 
+    raw_file = []
 
     # check each item in link_list
     for item in link_list:
         if cancelled_flag:
             break
         
-        
         count += 1
         queue.put(('progress', count, total_count))
-        
 
-        
         # store the new dict value
         url_dict = {}
         
@@ -204,64 +205,40 @@ async def check_link(link_list, credential, queue):
         # Get the array model for each SN
         model = get_model(SN)
         
-        # Check if the SN belongs to V4, test the Simplified Symmiwin link if so.
-        result_SS = False
-        if model in {'PMAX8500', 'PMAX2500'}:
-            result_SS = await test_link(link_SS)
-            logger.debug(f'result_SS: {result_SS}')
-        
+        if model:
+            # Check if the SN belongs to V4, test the Simplified Symmiwin link if so.
+            result_SS = False
+            if model in {'PMAX8500', 'PMAX2500'}:
+                if not refresh_flag:
+                    result_SS = await test_link(link_SS)
+                    logger.debug(f'result_SS: {result_SS}')
+                else:
+                    result_SS = True
+            
+            
+            if not refresh_flag:
+                # Test the RemoteAnywhere links no matter the SN is.
+                result_RA = await test_link(link_RA)
+            else:
+                result_RA = True
+            
+            # add the valid item to raw file
+            if result_RA or result_SS:
+                item[2] = credential
+                raw_file.append(item)
+                # The links is valid so we increase the counter
+                valid_count += 1
+                logger.info(f'This is the {valid_count}th available link.')
 
-        # Test the RemoteAnywhere links no matter the SN is.
-        result_RA = await test_link(link_RA)
-        
-        # add the valid item to raw file
-        if result_RA or result_SS:
-            raw_file.append(item)
-            # The links is valid so we increase the counter
-            valid_count += 1
-            logger.info(f'This is the {valid_count}th available link.')
-
-                
-        
-        if result_RA:
-            logger.info(f'Found a available link for SN: {SN}')
-            logger.debug(f'Found valid item: {item}')
+                    
             
-            
-            # store the new dict value, common part for both V3 and V4
-            url_dict['COLOR'] = COLOR[valid_count % 2]
-            url_dict['LABEL'] = item[0]
-            url_dict['TYPE'] = model
-            url_dict['Building'] = item[-5]
-            url_dict['Lab'] = item[-4]
-            url_dict['Tile'] = item[-3]
-            url_dict['Owner'] = item[-2]
-            url_dict['Group'] = item[-1]
-            
-            # RA links information
-            url_dict['RA_SN'] = SN
-            url_dict['RA'] = link_RA
-            # default empty for V4
-            url_dict['CS1_SN'] = ''
-            url_dict['CS2_SN'] = ''
-            url_dict['CS1'] = ''
-            url_dict['CS2'] = ''
-            
-            # Add value for V4 boxes
-            if result_SS:
-                url_dict['CS1_SN'] = SN
-                url_dict['CS2_SN'] = SN_2
-                url_dict['CS1'] = link_SS
-                url_dict['CS2'] = link_SS_2
-        # A scenario is that RA not access but SS can be reached
-        else:
-            if result_SS:
+            if result_RA:
                 logger.info(f'Found a available link for SN: {SN}')
                 logger.debug(f'Found valid item: {item}')
-        
-            
+                
+                
                 # store the new dict value, common part for both V3 and V4
-                url_dict['COLOR'] = COLOR[count % 2]
+                url_dict['COLOR'] = COLOR[valid_count % 2]
                 url_dict['LABEL'] = item[0]
                 url_dict['TYPE'] = model
                 url_dict['Building'] = item[-5]
@@ -269,25 +246,58 @@ async def check_link(link_list, credential, queue):
                 url_dict['Tile'] = item[-3]
                 url_dict['Owner'] = item[-2]
                 url_dict['Group'] = item[-1]
-                # values for V4
-                url_dict['CS1_SN'] = SN
-                url_dict['CS2_SN'] = SN_2
-                url_dict['CS1'] = link_SS
-                url_dict['CS2'] = link_SS_2 
-                # RA links empty
-                url_dict['RA_SN'] = ''
-                url_dict['RA'] = ''
+                
+                # RA links information
+                url_dict['RA_SN'] = SN
+                url_dict['RA'] = link_RA
+                # default empty for V4
+                url_dict['CS1_SN'] = ''
+                url_dict['CS2_SN'] = ''
+                url_dict['CS1'] = ''
+                url_dict['CS2'] = ''
+                
+                # Add value for V4 boxes
+                if result_SS:
+                    url_dict['CS1_SN'] = SN
+                    url_dict['CS2_SN'] = SN_2
+                    url_dict['CS1'] = link_SS
+                    url_dict['CS2'] = link_SS_2
+            # A scenario is that RA not access but SS can be reached
             else:
-                logger.warning(f'No available lab box links found for {SN}!')
-                        
-        
+                if result_SS:
+                    logger.info(f'Found a available link for SN: {SN}')
+                    logger.debug(f'Found valid item: {item}')
             
-        if url_dict:
-            html_list.append(url_dict)
-            #logger.debug(f'url_dict: {url_dict}')
+                
+                    # store the new dict value, common part for both V3 and V4
+                    url_dict['COLOR'] = COLOR[count % 2]
+                    url_dict['LABEL'] = item[0]
+                    url_dict['TYPE'] = model
+                    url_dict['Building'] = item[-5]
+                    url_dict['Lab'] = item[-4]
+                    url_dict['Tile'] = item[-3]
+                    url_dict['Owner'] = item[-2]
+                    url_dict['Group'] = item[-1]
+                    # values for V4
+                    url_dict['CS1_SN'] = SN
+                    url_dict['CS2_SN'] = SN_2
+                    url_dict['CS1'] = link_SS
+                    url_dict['CS2'] = link_SS_2 
+                    # RA links empty
+                    url_dict['RA_SN'] = ''
+                    url_dict['RA'] = ''
+                else:
+                    logger.warning(f'No available lab box links found for {SN}!')
+                            
+            
+                
+            if url_dict:
+                html_list.append(url_dict)
+                #logger.debug(f'url_dict: {url_dict}')
 
     if not cancelled_flag:
-        logger.debug(f'html_list: {html_list}')
+        #logger.debug(f'html_list: {html_list}')
+        logger.info('HTML list created')
         
         
         # Created Raw file for refresh using
@@ -303,7 +313,7 @@ def get_model(sn):
     model = ''
     for sn_pattern in SN_dict.keys():
             p = re.compile('\d'+ sn_pattern + '\d+M\d')
-            #logging.debug(f'Matching patter: {p}')
+            #logger.debug(f'Matching patter: {p}')
             result = p.search(sn)
             # if result found then create the dict and stop this tier for loop
             if result:
@@ -326,7 +336,7 @@ async def test_link(link):
             async with session.get(link) as response:
                 status = response.status
                 if status == 200:
-                    logging.debug(f'reachable url: {link}')
+                    logger.debug(f'reachable url: {link}')
                     return True
     except:
         logger.warning(f'unreachable url: {link}')
@@ -335,7 +345,7 @@ async def test_link(link):
 def html_table(data, dts_data, cred):
     global Cur_Time
     global PASSWORD
-    
+    logger.info('Creating HTML table')
     # Get current time as part of filename
     ctime = time.localtime()
     Cur_Time = time.strftime("%Y%m%d%H%M", ctime)
@@ -363,7 +373,7 @@ def html_table(data, dts_data, cred):
         with open(filename, 'w') as f:
             f.write(output)
         
-        logging.info(f'{filename} is created under current directory, please check')
+        logger.info(f'{filename} is created under current directory, please check')
         
         
         sg.popup(f'Done! The {filename} is created, Click OK to open it in your browser')
@@ -374,7 +384,7 @@ def html_table(data, dts_data, cred):
         webbrowser.open('file://' + html_path)
     
     else:
-        logging.warning(f'URL LINK list {data} not available...check check now')
+        logger.warning(f'URL LINK list {data} not available...check check now')
         sg.popup_error(f'Cannot generate HTML, please check your VPN connection and retry!!', title='ERROR MESSAGE', font=('Arial', 11))
 
 def write_file(listname):
@@ -384,9 +394,9 @@ def write_file(listname):
         with open('Raw_Data', 'w') as f:
             json.dump(listname, f, ensure_ascii=False, indent=4)
         
-        logging.info(f'Raw Data file is created')
+        logger.info(f'Raw Data file is created')
     else:
-        logging.warning(f'Raw Data file is empty, please check...')
+        logger.warning(f'Raw Data file is empty, please check...')
 
 def get_credential(url, raw_file):
     """Used to generate a latest Credential from web and generate a new html with latest credential"""
@@ -419,16 +429,18 @@ def get_credential(url, raw_file):
     if old_cred == latest_cred:
         compare_result = 'SAME'
         compare_color = 'yellow'
+        tooltip_msg = 'Latest Credential! Nothing to do :)'
     else:
         compare_result = 'NOT SAME'
         compare_color = 'red'
-    
-    # return those cred and list for next action
-    return (old_cred, old_list, latest_cred, latest_list, compare_result, compare_color)
+        tooltip_msg = 'Credential Changed! REFRESH or CREATE depends on you :>'
         
-def coroutine_task(cred, list_name, queue):
+    # return those cred and list for next action
+    return (old_cred, old_list, latest_cred, latest_list, compare_result, compare_color, tooltip_msg)
+        
+def coroutine_task(cred, list_name, queue, refresh_flag):
     """Used to run coroutine task for check_link function"""
-    asyncio.run(check_link(list_name, cred, queue))
+    asyncio.run(check_link(list_name, cred, queue, refresh_flag))
     
     # start_time = time.time()
     
@@ -440,15 +452,15 @@ def coroutine_task(cred, list_name, queue):
  
          
 def main():
-    global cancelled_flag   
+    global cancelled_flag 
     # Disable the warning for SSL
     requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
     logger.info('Disabling SSL warning message during url requests')
     
-    old_cred, old_list, latest_cred, latest_list, compare_result, compare_color = get_credential(url_RA, raw_file_name)
-    logger.debug(f'old_cred: {old_cred}, old_list: {old_list}, latest_cred: {latest_cred}, latest_list: {latest_list}, compare_result: {compare_result}, compare_color: {compare_color}') 
+    old_cred, old_list, latest_cred, latest_list, compare_result, compare_color, tooltip_msg = get_credential(url_RA, raw_file_name)
+    logger.debug(f'old_cred: {old_cred}, old_list: {old_list}, latest_cred: {latest_cred}, \
+                 compare_result: {compare_result}, compare_color: {compare_color}') 
     
-    dtslab = dts_array_list(latest_cred)
 
     # GUI part - PySimpleGUI
     layout = [
@@ -463,7 +475,7 @@ def main():
         
         [sg.Push(), sg.Text('Latest Credential:', font=('Arial', 13)), sg.Text(text=latest_cred, key='-LATEST-', font=('Consolas', 12), text_color='blue'), 
             sg.VerticalSeparator(),
-            sg.Text(text=compare_result, key='-COMPARE-', text_color=compare_color),
+            sg.Text(text=compare_result, key='-COMPARE-', text_color=compare_color, tooltip=tooltip_msg),
             sg.VerticalSeparator(),
             sg.Text('Last Credential:', font=('Arial', 13)), sg.Text(text=old_cred, key='-LAST-', font=('Consolas', 12), text_color='blue'),
             sg.Push()],
@@ -510,32 +522,42 @@ def main():
                     html_list = message[1]
                     sg.one_line_progress_meter_cancel('PROGRESSBAR')
                     dts_data = dts_array_list(latest_cred)
+
+                    # generate html table
                     html_table(html_list, dts_data, latest_cred)
+                    
+                    old_cred, old_list, latest_cred, latest_list, compare_result, compare_color, tooltip_msg = get_credential(url_RA, raw_file_name)
+                    # update the credential values
+                    window['-LATEST-'].update(latest_cred)
+                    window['-LAST-'].update(latest_cred)
+                    window['-COMPARE-'].update(value=compare_result, text_color=compare_color)
                 
             
         if event == '-CREATE-':
             # reset cancel flag to False
             cancelled_flag = False
+            
+            logger.info('CREATE button clicked...')
+            
             # empty current queue
             queue = Queue()
             # check if we got latest list
             if not latest_list:
-                old_cred, old_list, latest_cred, latest_list, compare_result, compare_color = get_credential(url_RA, raw_file_name)
+                old_cred, old_list, latest_cred, latest_list, compare_result, compare_color, tooltip_msg = get_credential(url_RA, raw_file_name)
             
             if latest_list:
-                threading.Thread(target=coroutine_task, args=(latest_cred, latest_list, queue), daemon=True).start()
-                old_cred, old_list, latest_cred, latest_list, compare_result, compare_color = get_credential(url_RA, raw_file_name)
-                window['-LATEST-'].update(latest_cred)
-                window['-LAST-'].update(old_cred)
-                window['-COMPARE-'].update(value=compare_result, text_color=compare_color)
+                threading.Thread(target=coroutine_task, args=(latest_cred, latest_list, queue, False), daemon=True).start()
+
             
         if event == '-REFRESH-':
             cancelled_flag = False
+            logger.info('REFRESH button clicked...')
+            
             # empty current queue
             queue = Queue()
             # check if we got latest list and latest credential
             if not latest_list:
-                old_cred, old_list, latest_cred, latest_list, compare_result, compare_color = get_credential(url_RA, raw_file_name)
+                old_cred, old_list, latest_cred, latest_list, compare_result, compare_color, tooltip_msg = get_credential(url_RA, raw_file_name)
             
             if latest_list:
                 # check if Raw_Data exists
@@ -543,7 +565,8 @@ def main():
                     if compare_result == 'SAME':
                         sg.popup(f"Credential <{latest_cred}> are latest! No need to do REFRESH", title='Warning', font=('Arial', 12))
                     else:
-                        threading.Thread(target=coroutine_task, args=(latest_cred, old_list, queue), daemon=True).start()
+                        threading.Thread(target=coroutine_task, args=(latest_cred, old_list, queue, True), daemon=True).start()
+
                 else:
                     sg.popup_error(f"{raw_file_name} NOT found or Corrupted, please use 'CREATE' button to get a new HTML!", title='ERROR MESSAGE', font=('Arial', 11))
 
