@@ -2,7 +2,7 @@
 Author: peanutfisher meifajia@outlook.com
 Date: 2024-05-19 17:29:05
 LastEditors: peanutfisher meifajia@outlook.com
-LastEditTime: 2024-11-13 17:15:22
+LastEditTime: 2024-11-13 22:27:22
 FilePath: \AvailableLabBox\test.py
 '''
 import logging
